@@ -1,107 +1,159 @@
-﻿namespace Evaluator.Core;
+﻿using System;
+using System.Collections.Generic;
+using System.Globalization;
 
-public class ExpressionEvaluator
+namespace Evaluator.Core
 {
-    public static double Evaluate(string infix)
+    public class ExpressionEvaluator
     {
-        var postfix = InfixToPostfix(infix);
-        return Calulate(postfix);
-    }
-
-    private static string InfixToPostfix(string infix)
-    {
-        var stack = new Stack<char>();
-        var postfix = string.Empty;
-        foreach (char item in infix)
+        /// <summary>
+        /// Evaluates an infix expression (supports +,-,*,/,^,(), decimals).
+        /// </summary>
+        public static double Evaluate(string infix)
         {
-            if (IsOperator(item))
+            var tokens = Tokenize(infix);
+            var postfix = InfixToPostfix(tokens);
+            return Calulate(postfix);
+        }
+
+        /// <summary>
+        /// Tokenizes: groups digits and dot into full numbers and separates operators
+        /// </summary>
+        private static List<string> Tokenize(string infix)
+        {
+            var tokens = new List<string>();
+            string numberBuffer = string.Empty;
+
+            foreach (char c in infix)
             {
-                if (item == ')')
+                if (char.IsDigit(c) || c == '.') // part of a number
                 {
-                    do
-                    {
-                        postfix += stack.Pop();
-                    } while (stack.Peek() != '(');
-                    stack.Pop();
+                    numberBuffer += c;
                 }
-                else
+                else if (!char.IsWhiteSpace(c)) // operator or parenthesis
                 {
-                    if (stack.Count > 0)
+                    if (numberBuffer.Length > 0)
                     {
-                        if (PriorityInfix(item) > PriorityStack(stack.Peek()))
-                        {
-                            stack.Push(item);
-                        }
-                        else
-                        {
-                            postfix += stack.Pop();
-                            stack.Push(item);
-                        }
+                        tokens.Add(numberBuffer);
+                        numberBuffer = string.Empty;
+                    }
+                    tokens.Add(c.ToString());
+                }
+            }
+
+            if (numberBuffer.Length > 0)
+                tokens.Add(numberBuffer);
+
+            return tokens;
+        }
+
+        /// <summary>
+        /// Converts infix (list of tokens) to postfix (list of tokens).
+        /// </summary>
+        private static List<string> InfixToPostfix(List<string> tokens)
+        {
+            var stack = new Stack<string>();
+            var postfix = new List<string>();
+
+            foreach (string token in tokens)
+            {
+                if (IsOperator(token))
+                {
+                    if (token == ")")
+                    {
+                        while (stack.Count > 0 && stack.Peek() != "(")
+                            postfix.Add(stack.Pop());
+                        if (stack.Count == 0)
+                            throw new Exception("Paréntesis desbalanceados.");
+                        stack.Pop(); // remove "("
                     }
                     else
                     {
-                        stack.Push(item);
+                        while (stack.Count > 0 && PriorityInfix(token) <= PriorityStack(stack.Peek()))
+                        {
+                            postfix.Add(stack.Pop());
+                        }
+                        stack.Push(token);
                     }
                 }
+                else
+                {
+                    // is number
+                    postfix.Add(token);
+                }
             }
-            else
+
+            while (stack.Count > 0)
             {
-                postfix += item;
+                var top = stack.Pop();
+                if (top == "(" || top == ")")
+                    throw new Exception("Paréntesis desbalanceados.");
+                postfix.Add(top);
             }
+
+            return postfix;
         }
-        while (stack.Count > 0)
+
+        private static bool IsOperator(string token)
+            => token is "^" or "/" or "*" or "%" or "+" or "-" or "(" or ")";
+
+        private static int PriorityInfix(string op) => op switch
         {
-            postfix += stack.Pop();
-        }
-        return postfix;
-    }
+            "^" => 4,
+            "*" or "/" or "%" => 2,
+            "-" or "+" => 1,
+            "(" => 5,
+            _ => throw new Exception("Operador inválido."),
+        };
 
-    private static bool IsOperator(char item) => item is '^' or '/' or '*' or '%' or '+' or '-' or '(' or ')';
-
-    private static int PriorityInfix(char op) => op switch
-    {
-        '^' => 4,
-        '*' or '/' or '%' => 2,
-        '-' or '+' => 1,
-        '(' => 5,
-        _ => throw new Exception("Invalid expression."),
-    };
-
-    private static int PriorityStack(char op) => op switch
-    {
-        '^' => 3,
-        '*' or '/' or '%' => 2,
-        '-' or '+' => 1,
-        '(' => 0,
-        _ => throw new Exception("Invalid expression."),
-    };
-
-    private static double Calulate(string postfix)
-    {
-        var stack = new Stack<double>();
-        foreach (char item in postfix)
+        private static int PriorityStack(string op) => op switch
         {
-            if (IsOperator(item))
-            {
-                var op2 = stack.Pop();
-                var op1 = stack.Pop();
-                stack.Push(Calulate(op1, item, op2));
-            }
-            else
-            {
-                stack.Push(Convert.ToDouble(item.ToString()));
-            }
-        }
-        return stack.Peek();
-    }
+            "^" => 3,
+            "*" or "/" or "%" => 2,
+            "-" or "+" => 1,
+            "(" => 0,
+            _ => throw new Exception("Operador inválido."),
+        };
 
-    private static double Calulate(double op1, char item, double op2) => item switch
-    {
-        '*' => op1 * op2,
-        '/' => op1 / op2,
-        '^' => Math.Pow(op1, op2),
-        '+' => op1 + op2,
-        '-' => op1 - op2,
-        _ => throw new Exception("Invalid expression."),
-    };
+        /// <summary>
+        /// Calculates result from the postfix list
+        /// </summary>
+        private static double Calulate(List<string> postfix)
+        {
+            var stack = new Stack<double>();
+            foreach (string token in postfix)
+            {
+                if (IsOperator(token))
+                {
+                    if (stack.Count < 2)
+                        throw new Exception("Expresión inválida.");
+                    var op2 = stack.Pop();
+                    var op1 = stack.Pop();
+                    stack.Push(Calulate(op1, token, op2));
+                }
+                else
+                {
+                    // safe parse using invariant culture so "." works everywhere
+                    if (!double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+                        throw new Exception($"Token no numérico: '{token}'");
+                    stack.Push(value);
+                }
+            }
+
+            if (stack.Count != 1)
+                throw new Exception("Expresión inválida.");
+            return stack.Peek();
+        }
+
+        private static double Calulate(double op1, string oper, double op2) => oper switch
+        {
+            "*" => op1 * op2,
+            "/" => op1 / op2,
+            "^" => Math.Pow(op1, op2),
+            "+" => op1 + op2,
+            "-" => op1 - op2,
+            "%" => op1 % op2,
+            _ => throw new Exception("Operador inválido."),
+        };
+    }
 }

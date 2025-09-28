@@ -9,6 +9,6 @@ var infix2 = "4*(5+6-(8/2^3)-7)-1";
 var result2 = ExpressionEvaluator.Evaluate(infix2);
 Console.WriteLine($"{infix2}={result2}");
 
-var infix3 = "123.89^(1.6/2.789)";
+var infix3 ="123.89^(1/2)";
 var result3 = ExpressionEvaluator.Evaluate(infix3);
 Console.WriteLine($"{infix3}={result3}");
